@@ -1,4 +1,13 @@
 ---
+title: Traffic Rl Openenv
+emoji: 😻
+colorFrom: green
+colorTo: red
+sdk: docker
+pinned: false
+short_description: An Renforcement Learing Environment based on Traffic System
+---
+
 # 🚦 Traffic RL OpenEnv Environment
 
 ## 📌 Overview
@@ -6,6 +15,7 @@
 This project implements a **Reinforcement Learning (RL) based traffic signal control system** using the OpenEnv framework.
 
 The agent learns to **optimize traffic flow** by dynamically switching signals based on real-time vehicle density at an intersection.
+
 ---
 
 ## 🎯 Problem Statement
@@ -125,7 +135,5 @@ This project demonstrates a complete pipeline:
 **RL model → Environment → Evaluation → Deployment**
 
 Designed to showcase practical application of RL in real-world systems like traffic optimization.
-
----
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
