@@ -1,87 +1,108 @@
-from agent.q_learning import QLearningAgent
-from env.models import Action
-from tasks.traffic_tasks import get_easy_env, get_medium_env, get_hard_env
-from tasks.grader import grade_episode
+import os
 import pickle
-agent=QLearningAgent
-with open("q_table.pkl", "rb") as f:
-    agent.q = pickle.load(f)
+from typing import List, Optional
+from openai import OpenAI
 
-def encode_state(obs):
-    def bucket(x):
-        if x < 3:
-            return 0
-        elif x < 6:
-            return 1
-        else:
-            return 2
+from env.environment import TrafficEnv
+from env.models import Action
+from agent.q_learning import QLearningAgent
+from tasks.grader import grade_episode
 
-    return (
-        bucket(obs.north),
-        bucket(obs.south),
-        bucket(obs.east),
-        bucket(obs.west),
-        obs.signal
+
+# ===== ENV VARIABLES (MANDATORY) =====
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "dummy-model")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+client = None
+if HF_TOKEN:
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+
+
+# ===== LOGGING FUNCTIONS (STRICT FORMAT) =====
+def log_start(task: str, env: str, model: str):
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
+    error_val = error if error else "null"
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}",
+        flush=True,
     )
 
 
-def run_task(name, env, agent):
-    print(f"\n=== TASK: {name} ===")
+def log_end(success: bool, steps: int, score: float, rewards: List[float]):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        flush=True,
+    )
+
+
+# ===== STATE ENCODING =====
+def encode_state(obs):
+    return (obs.north, obs.south, obs.east, obs.west, obs.signal)
+
+
+# ===== RUN TASK =====
+def run_task(task_name):
+    env = TrafficEnv()
+    agent = QLearningAgent()
+
+    # load trained Q-table
+    with open("q_table.pkl", "rb") as f:
+        agent.q = pickle.load(f)
 
     obs = env.reset()
     state = encode_state(obs)
 
-    total_reward = 0
+    rewards = []
+    steps = 0
     done = False
 
-    print("[START]")
+    log_start(task=task_name, env="traffic-env", model=MODEL_NAME)
 
-    while not done:
-        ns = obs.north + obs.south
-        ew = obs.east + obs.west
+    try:
+        while not done:
+            ns = obs.north + obs.south
+            ew = obs.east + obs.west
 
-        if abs(ns - ew) > 2:
-            action_val = 0 if ns > ew else 1
-        else:
-            action_val = agent.choose_action(state)
+            # hybrid policy
+            if abs(ns - ew) > 2:
+                action_val = 0 if ns > ew else 1
+            else:
+                action_val = agent.choose_action(state)
 
-        action = Action(signal=action_val)
+            action = Action(signal=action_val)
 
-        next_obs, reward, done, _ = env.step(action)
-        next_state = encode_state(next_obs)
+            next_obs, reward, done, _ = env.step(action)
 
-        print(f"[STEP] action={action_val} reward={round(reward,3)}")
+            rewards.append(reward)
+            steps += 1
 
-        state = next_state
-        obs = next_obs
-        total_reward += reward
+            log_step(
+                step=steps,
+                action=str(action_val),
+                reward=reward,
+                done=done,
+                error=None
+            )
 
-    print("[END]")
+            state = encode_state(next_obs)
+            obs = next_obs
 
-    score = grade_episode(total_reward, env.max_steps)
+        score = grade_episode(sum(rewards), steps)
+        success = score > 0.3
 
-    print(f"{name} → Score: {score}")
+    finally:
+        log_end(success=success, steps=steps, score=score, rewards=rewards)
+
     return score
 
 
+# ===== MAIN =====
 if __name__ == "__main__":
-    agent = QLearningAgent()
-
-    # IMPORTANT: turn off exploration
-    agent.epsilon = 0
-
-    tasks = [
-        ("Easy", get_easy_env()),
-        ("Medium", get_medium_env()),
-        ("Hard", get_hard_env()),
-    ]
-
-    results = {}
-
-    for name, env in tasks:
-        score = run_task(name, env, agent)
-        results[name] = score
-
-    print("\nFinal Results:")
-    for k, v in results.items():
-        print(f"{k}: {v}")
+    run_task("easy")
+    run_task("medium")
+    run_task("hard")
