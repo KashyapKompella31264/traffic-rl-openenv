@@ -8,8 +8,12 @@ authors = [
 dependencies = [
     "flask",
     "pydantic",
-    "openai"
+    "openai",
+    "openenv-core"
 ]
+
+[project.scripts]
+start = "server.app:app"
 
 [build-system]
 requires = ["setuptools", "wheel"]
