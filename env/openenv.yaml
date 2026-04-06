@@ -1,0 +1,12 @@
+name: traffic-rl-env
+description: RL-based traffic signal control environment
+
+entrypoint: env.environment:TrafficEnv
+
+methods:
+  - reset
+  - step
+  - state
+
+observation_model: env.models:Observation
+action_model: env.models:Action
