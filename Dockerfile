@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir pydantic flask
 
 EXPOSE 7860
 
-CMD ["python", "server.py"]
+CMD ["python", "-m", "server.app"]
