@@ -1,0 +1,16 @@
+[project]
+name = "traffic-rl-openenv"
+version = "0.1.0"
+description = "RL-based traffic signal control environment"
+authors = [
+    { name = "Kashyap" }
+]
+dependencies = [
+    "flask",
+    "pydantic",
+    "openai"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
