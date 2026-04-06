@@ -4,7 +4,7 @@ from env.environment import TrafficEnv
 app = Flask(__name__)
 env = TrafficEnv()
 
-@app.route("/reset", methods=["GET"])
+@app.route("/reset", methods=["GET", "POST"])
 def reset():
     obs = env.reset()
     return jsonify(obs.dict())
