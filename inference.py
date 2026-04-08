@@ -1,7 +1,10 @@
 import os
 import pickle
 from typing import List, Optional
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 from env.environment import TrafficEnv
 from env.models import Action
@@ -15,7 +18,7 @@ MODEL_NAME = os.getenv("MODEL_NAME", "dummy-model")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = None
-if HF_TOKEN:
+if OpenAI and HF_TOKEN:
     client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 
@@ -101,8 +104,10 @@ def run_task(task_name):
     return score
 
 
-# ===== MAIN =====
 if __name__ == "__main__":
-    run_task("easy")
-    run_task("medium")
-    run_task("hard")
+    try:
+        run_task("easy")
+        run_task("medium")
+        run_task("hard")
+    except Exception as e:
+        print(f"[ERROR] {str(e)}", flush=True)
