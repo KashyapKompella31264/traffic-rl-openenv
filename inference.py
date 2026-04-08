@@ -14,10 +14,10 @@ from agent.q_learning import QLearningAgent
 from tasks.grader import grade_episode
 
 
-# ===== ENV VARIABLES =====
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "dummy-model")
-HF_TOKEN = os.getenv("HF_TOKEN")
+# ===== ENV VARIABLES (STRICT - NO FALLBACKS) =====
+API_BASE_URL = os.environ.get("API_BASE_URL")
+MODEL_NAME = os.environ.get("MODEL_NAME")
+API_KEY = os.environ.get("API_KEY")
 
 
 # ===== LOGGING FUNCTIONS =====
@@ -46,13 +46,13 @@ def encode_state(obs):
     return (obs.north, obs.south, obs.east, obs.west, obs.signal)
 
 
-# ===== LLM CALL =====
+# ===== LLM CALL (MANDATORY FOR VALIDATION) =====
 def make_llm_call():
     try:
-        if OpenAI:
+        if OpenAI and API_BASE_URL and API_KEY and MODEL_NAME:
             client = OpenAI(
-                base_url=os.environ.get("API_BASE_URL"),
-                api_key=os.environ.get("HF_TOKEN"),
+                base_url=API_BASE_URL,
+                api_key=API_KEY,
             )
 
             try:
@@ -76,6 +76,7 @@ def run_task(task_name):
     env = TrafficEnv()
     agent = QLearningAgent()
 
+    # SAFE Q-TABLE LOAD
     if os.path.exists("q_table.pkl"):
         try:
             with open("q_table.pkl", "rb") as f:
@@ -137,7 +138,7 @@ def run_task(task_name):
 # ===== MAIN =====
 if __name__ == "__main__":
     try:
-        make_llm_call()
+        make_llm_call()   # MUST be called before tasks
         run_task("easy")
         run_task("medium")
         run_task("hard")
