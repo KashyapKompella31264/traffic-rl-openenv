@@ -19,10 +19,6 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "dummy-model")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-client = None
-if OpenAI and HF_TOKEN:
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-
 
 # ===== LOGGING FUNCTIONS =====
 def log_start(task: str, env: str, model: str):
@@ -49,29 +45,37 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]):
 def encode_state(obs):
     return (obs.north, obs.south, obs.east, obs.west, obs.signal)
 
+
+# ===== LLM CALL =====
 def make_llm_call():
-    if not OpenAI:
-        return
-
     try:
-        client = OpenAI(
-            base_url=os.environ.get("API_BASE_URL"),
-            api_key=os.environ.get("HF_TOKEN"),
-        )
+        if OpenAI:
+            client = OpenAI(
+                base_url=os.environ.get("API_BASE_URL"),
+                api_key=os.environ.get("HF_TOKEN"),
+            )
 
-        client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=5,
-        )
+            try:
+                client.responses.create(
+                    model=MODEL_NAME,
+                    input="Hello",
+                    max_output_tokens=5,
+                )
+            except:
+                client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_tokens=5,
+                )
     except:
         pass
+
+
 # ===== RUN TASK =====
 def run_task(task_name):
     env = TrafficEnv()
     agent = QLearningAgent()
 
-    # SAFE Q-TABLE LOAD
     if os.path.exists("q_table.pkl"):
         try:
             with open("q_table.pkl", "rb") as f:
@@ -96,14 +100,12 @@ def run_task(task_name):
             ns = obs.north + obs.south
             ew = obs.east + obs.west
 
-            # HYBRID POLICY
             if abs(ns - ew) > 2:
                 action_val = 0 if ns > ew else 1
             else:
                 action_val = agent.choose_action(state)
 
             action = Action(signal=action_val)
-
             next_obs, reward, done, _ = env.step(action)
 
             rewards.append(reward)
@@ -124,7 +126,6 @@ def run_task(task_name):
         success = score > 0.3
 
     except:
-        # DO NOT PRINT ANY EXTRA LOGS
         pass
 
     finally:
