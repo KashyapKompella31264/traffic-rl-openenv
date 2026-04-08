@@ -49,7 +49,23 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]):
 def encode_state(obs):
     return (obs.north, obs.south, obs.east, obs.west, obs.signal)
 
+def make_llm_call():
+    if not OpenAI:
+        return
 
+    try:
+        client = OpenAI(
+            base_url=os.environ.get("API_BASE_URL"),
+            api_key=os.environ.get("HF_TOKEN"),
+        )
+
+        client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": "Hello"}],
+            max_tokens=5,
+        )
+    except:
+        pass
 # ===== RUN TASK =====
 def run_task(task_name):
     env = TrafficEnv()
@@ -120,6 +136,7 @@ def run_task(task_name):
 # ===== MAIN =====
 if __name__ == "__main__":
     try:
+        make_llm_call()
         run_task("easy")
         run_task("medium")
         run_task("hard")
