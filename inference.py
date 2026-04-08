@@ -48,31 +48,36 @@ def encode_state(obs):
 
 # ===== LLM CALL (MANDATORY FOR VALIDATION) =====
 def make_llm_call():
-    if not OpenAI:
-        print("[LLM_ERROR] OpenAI not installed", flush=True)
+    if OpenAI is None:
+        print("[LLM_ERROR] OpenAI library not found", flush=True)
+        return
+
+    url = os.environ.get("API_BASE_URL")
+    key = os.environ.get("API_KEY")
+    model = os.environ.get("MODEL_NAME")
+
+    # Clean the URL to prevent /v1/v1 errors
+    if url and url.endswith("/v1"):
+        url = url[:-3].rstrip("/")
+
+    if not url or not key:
+        print(f"[LLM_ERROR] Missing credentials: URL={url}, KEY={'SET' if key else 'MISSING'}", flush=True)
         return
 
     try:
-        # Use the env variables as instructed by the validator
-        client = OpenAI(
-            base_url=os.environ["API_BASE_URL"],
-            api_key=os.environ["API_KEY"],
+        # Re-initialize with the cleaned URL
+        client = OpenAI(base_url=url, api_key=key)
+        
+        completion = client.chat.completions.create(
+            model=model if model else "gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "test"}],
+            max_tokens=1
         )
-
-        # Standard Chat Completion call
-        response = client.chat.completions.create(
-            model=os.environ["MODEL_NAME"],
-            messages=[
-                {"role": "user", "content": "Hello, this is a validation call."}
-            ],
-            max_tokens=5,
-        )
-
-        print(f"[LLM_CALL_SUCCESS] {response.choices[0].message.content}", flush=True)
-
+        print(f"[LLM_CALL_SUCCESS] Response: {completion.choices[0].message.content}", flush=True)
     except Exception as e:
-        # Extremely important: Print the error so you can see it in the logs if it fails!
-        print(f"[LLM_ERROR] {str(e)}", flush=True)
+        print(f"[LLM_ERROR] {type(e).__name__}: {str(e)}", flush=True)
+
+
 
 
 # ===== RUN TASK =====
@@ -141,12 +146,12 @@ def run_task(task_name):
 
 # ===== MAIN =====
 if __name__ == "__main__":
-    print(f"Checking environment: URL={API_BASE_URL}, MODEL={MODEL_NAME}", flush=True)
+    # Ensure this runs first and flushes
+    make_llm_call()
     
-    # We call this first because Phase 2 is "fail-fast"
-    make_llm_call() 
-    
-    # If the tasks run, the proxy call was at least attempted
-    run_task("easy")
-    run_task("medium")
-    run_task("hard")
+    # Run tasks even if LLM fails so we can see grader output
+    for task in ["easy", "medium", "hard"]:
+        try:
+            run_task(task)
+        except Exception as e:
+            print(f"Task {task} failed: {str(e)}", flush=True)
