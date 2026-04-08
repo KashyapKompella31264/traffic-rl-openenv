@@ -2,7 +2,6 @@ import os
 import pickle
 from typing import List, Optional
 
-# SAFE OPENAI IMPORT
 try:
     from openai import OpenAI
 except ImportError:
@@ -13,14 +12,11 @@ from env.models import Action
 from agent.q_learning import QLearningAgent
 from tasks.grader import grade_episode
 
-
-# ===== ENV VARIABLES (STRICT - NO FALLBACKS) =====
 API_BASE_URL = os.environ.get("API_BASE_URL")
 MODEL_NAME = os.environ.get("MODEL_NAME")
 API_KEY = os.environ.get("API_KEY")
 
 
-# ===== LOGGING FUNCTIONS =====
 def log_start(task: str, env: str, model: str):
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
@@ -41,33 +37,27 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]):
     )
 
 
-# ===== STATE ENCODING =====
 def encode_state(obs):
     return (obs.north, obs.south, obs.east, obs.west, obs.signal)
 
 
-# ===== LLM CALL (MANDATORY FOR VALIDATION) =====
 def make_llm_call():
     if OpenAI is None:
         print("[LLM_ERROR] OpenAI library not found", flush=True)
         return
 
-    url = os.environ.get("API_BASE_URL")
+    url = os.environ.get("API_BASE_URL")   # Use as-is — do NOT strip /v1
     key = os.environ.get("API_KEY")
     model = os.environ.get("MODEL_NAME")
-
-    # Clean the URL to prevent /v1/v1 errors
-    if url and url.endswith("/v1"):
-        url = url[:-3].rstrip("/")
 
     if not url or not key:
         print(f"[LLM_ERROR] Missing credentials: URL={url}, KEY={'SET' if key else 'MISSING'}", flush=True)
         return
 
     try:
-        # Re-initialize with the cleaned URL
+        # Pass the URL exactly as injected by the hackathon environment
         client = OpenAI(base_url=url, api_key=key)
-        
+
         completion = client.chat.completions.create(
             model=model if model else "gpt-3.5-turbo",
             messages=[{"role": "user", "content": "test"}],
@@ -78,14 +68,10 @@ def make_llm_call():
         print(f"[LLM_ERROR] {type(e).__name__}: {str(e)}", flush=True)
 
 
-
-
-# ===== RUN TASK =====
 def run_task(task_name):
     env = TrafficEnv()
     agent = QLearningAgent()
 
-    # SAFE Q-TABLE LOAD
     if os.path.exists("q_table.pkl"):
         try:
             with open("q_table.pkl", "rb") as f:
@@ -144,12 +130,9 @@ def run_task(task_name):
     return score
 
 
-# ===== MAIN =====
 if __name__ == "__main__":
-    # Ensure this runs first and flushes
     make_llm_call()
-    
-    # Run tasks even if LLM fails so we can see grader output
+
     for task in ["easy", "medium", "hard"]:
         try:
             run_task(task)
