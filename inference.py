@@ -48,27 +48,31 @@ def encode_state(obs):
 
 # ===== LLM CALL (MANDATORY FOR VALIDATION) =====
 def make_llm_call():
-    try:
-        if OpenAI and API_BASE_URL and API_KEY and MODEL_NAME:
-            client = OpenAI(
-                base_url=API_BASE_URL,
-                api_key=API_KEY,
-            )
+    if not OpenAI:
+        print("[LLM_ERROR] OpenAI not installed", flush=True)
+        return
 
-            try:
-                client.responses.create(
-                    model=MODEL_NAME,
-                    input="Hello",
-                    max_output_tokens=5,
-                )
-            except:
-                client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[{"role": "user", "content": "Hello"}],
-                    max_tokens=5,
-                )
-    except:
-        pass
+    try:
+        # Use the env variables as instructed by the validator
+        client = OpenAI(
+            base_url=os.environ["API_BASE_URL"],
+            api_key=os.environ["API_KEY"],
+        )
+
+        # Standard Chat Completion call
+        response = client.chat.completions.create(
+            model=os.environ["MODEL_NAME"],
+            messages=[
+                {"role": "user", "content": "Hello, this is a validation call."}
+            ],
+            max_tokens=5,
+        )
+
+        print(f"[LLM_CALL_SUCCESS] {response.choices[0].message.content}", flush=True)
+
+    except Exception as e:
+        # Extremely important: Print the error so you can see it in the logs if it fails!
+        print(f"[LLM_ERROR] {str(e)}", flush=True)
 
 
 # ===== RUN TASK =====
@@ -137,10 +141,12 @@ def run_task(task_name):
 
 # ===== MAIN =====
 if __name__ == "__main__":
-    try:
-        make_llm_call()   # MUST be called before tasks
-        run_task("easy")
-        run_task("medium")
-        run_task("hard")
-    except:
-        pass
+    print(f"Checking environment: URL={API_BASE_URL}, MODEL={MODEL_NAME}", flush=True)
+    
+    # We call this first because Phase 2 is "fail-fast"
+    make_llm_call() 
+    
+    # If the tasks run, the proxy call was at least attempted
+    run_task("easy")
+    run_task("medium")
+    run_task("hard")
