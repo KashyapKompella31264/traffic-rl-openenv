@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install --no-cache-dir pydantic flask
+RUN pip install --no-cache-dir pydantic flask openai
 
 EXPOSE 7860
 
