@@ -17,6 +17,59 @@ MODEL_NAME = os.environ.get("MODEL_NAME")
 API_KEY = os.environ.get("API_KEY")
 
 
+def get_llm_client():
+    """Create and return an OpenAI client using hackathon-injected env vars."""
+    if OpenAI is None:
+        print("[LLM_ERROR] OpenAI library not found", flush=True)
+        return None
+
+    url = os.environ.get("API_BASE_URL")
+    key = os.environ.get("API_KEY")
+
+    if not url or not key:
+        print(
+            f"[LLM_ERROR] Missing credentials: URL={url}, KEY={'SET' if key else 'MISSING'}",
+            flush=True,
+        )
+        return None
+
+    return OpenAI(base_url=url, api_key=key)
+
+
+def llm_choose_action(client, obs) -> Optional[int]:
+    """Ask the LLM to choose a traffic signal action based on current state."""
+    model = os.environ.get("MODEL_NAME") or "gpt-3.5-turbo"
+
+    prompt = (
+        "You are a traffic signal controller at a 4-way intersection.\n"
+        f"Current vehicle counts — North: {obs.north}, South: {obs.south}, "
+        f"East: {obs.east}, West: {obs.west}.\n"
+        f"Current signal: {'North-South green' if obs.signal == 0 else 'East-West green'}.\n\n"
+        "Choose the next signal to minimize total waiting vehicles.\n"
+        "Reply with ONLY a single digit: 0 for North-South green, or 1 for East-West green."
+    )
+
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=3,
+            temperature=0.0,
+        )
+        reply = completion.choices[0].message.content.strip()
+        # Extract 0 or 1 from the response
+        if "0" in reply:
+            return 0
+        elif "1" in reply:
+            return 1
+        else:
+            print(f"[LLM_WARN] Unexpected response: {reply}", flush=True)
+            return None
+    except Exception as e:
+        print(f"[LLM_ERROR] {type(e).__name__}: {str(e)}", flush=True)
+        return None
+
+
 def log_start(task: str, env: str, model: str):
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
@@ -41,34 +94,7 @@ def encode_state(obs):
     return (obs.north, obs.south, obs.east, obs.west, obs.signal)
 
 
-def make_llm_call():
-    if OpenAI is None:
-        print("[LLM_ERROR] OpenAI library not found", flush=True)
-        return
-
-    url = os.environ.get("API_BASE_URL")   # Use as-is — do NOT strip /v1
-    key = os.environ.get("API_KEY")
-    model = os.environ.get("MODEL_NAME")
-
-    if not url or not key:
-        print(f"[LLM_ERROR] Missing credentials: URL={url}, KEY={'SET' if key else 'MISSING'}", flush=True)
-        return
-
-    try:
-        # Pass the URL exactly as injected by the hackathon environment
-        client = OpenAI(base_url=url, api_key=key)
-
-        completion = client.chat.completions.create(
-            model=model if model else "gpt-3.5-turbo",
-            messages=[{"role": "user", "content": "test"}],
-            max_tokens=1
-        )
-        print(f"[LLM_CALL_SUCCESS] Response: {completion.choices[0].message.content}", flush=True)
-    except Exception as e:
-        print(f"[LLM_ERROR] {type(e).__name__}: {str(e)}", flush=True)
-
-
-def run_task(task_name):
+def run_task(task_name, llm_client):
     env = TrafficEnv()
     agent = QLearningAgent()
 
@@ -93,13 +119,20 @@ def run_task(task_name):
 
     try:
         while not done:
-            ns = obs.north + obs.south
-            ew = obs.east + obs.west
+            action_val = None
 
-            if abs(ns - ew) > 2:
-                action_val = 0 if ns > ew else 1
-            else:
-                action_val = agent.choose_action(state)
+            # --- Primary: Ask the LLM for the action ---
+            if llm_client is not None:
+                action_val = llm_choose_action(llm_client, obs)
+
+            # --- Fallback: heuristic + Q-table ---
+            if action_val is None:
+                ns = obs.north + obs.south
+                ew = obs.east + obs.west
+                if abs(ns - ew) > 2:
+                    action_val = 0 if ns > ew else 1
+                else:
+                    action_val = agent.choose_action(state)
 
             action = Action(signal=action_val)
             next_obs, reward, done, _ = env.step(action)
@@ -112,7 +145,7 @@ def run_task(task_name):
                 action=str(action_val),
                 reward=reward,
                 done=done,
-                error=None
+                error=None,
             )
 
             state = encode_state(next_obs)
@@ -131,10 +164,10 @@ def run_task(task_name):
 
 
 if __name__ == "__main__":
-    make_llm_call()
+    llm_client = get_llm_client()
 
     for task in ["easy", "medium", "hard"]:
         try:
-            run_task(task)
+            run_task(task, llm_client)
         except Exception as e:
             print(f"Task {task} failed: {str(e)}", flush=True)
