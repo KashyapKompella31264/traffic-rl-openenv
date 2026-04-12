@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚦 Traffic RL — Live Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-card-hover: rgba(30, 41, 59, 0.9);
+            --border: rgba(99, 102, 241, 0.2);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #6366f1;
+            --accent-cyan: #22d3ee;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-amber: #f59e0b;
+            --accent-purple: #a855f7;
+            --glow-blue: 0 0 20px rgba(99, 102, 241, 0.3);
+            --glow-green: 0 0 20px rgba(34, 197, 94, 0.4);
+            --glow-red: 0 0 20px rgba(239, 68, 68, 0.4);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(34, 211, 238, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(168, 85, 247, 0.04) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app { position: relative; z-index: 1; padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            animation: fadeInDown 0.6s ease;
+        }
+        .header h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #6366f1, #22d3ee, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+        .header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-top: 6px;
+        }
+
+        /* Grid */
+        .grid { display: grid; grid-template-columns: 1fr 420px 1fr; gap: 24px; align-items: start; }
+        @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(12px);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .card:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: var(--glow-blue); }
+        .card-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        /* Intersection */
+        .intersection-wrapper { display: flex; justify-content: center; align-items: center; }
+        .intersection-canvas { position: relative; width: 380px; height: 380px; }
+
+        .road {
+            position: absolute;
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        .road-ns { width: 80px; height: 100%; left: 50%; transform: translateX(-50%); }
+        .road-ew { height: 80px; width: 100%; top: 50%; transform: translateY(-50%); }
+        .road-center {
+            position: absolute;
+            width: 80px; height: 80px;
+            left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e293b;
+            z-index: 2;
+        }
+
+        .lane-marker {
+            position: absolute;
+            background: rgba(250, 204, 21, 0.3);
+            z-index: 3;
+        }
+        .lane-marker.ns {
+            width: 2px; height: 100%;
+            left: 50%; transform: translateX(-50%);
+            background: repeating-linear-gradient(to bottom, rgba(250,204,21,0.3) 0px, rgba(250,204,21,0.3) 12px, transparent 12px, transparent 24px);
+        }
+        .lane-marker.ew {
+            height: 2px; width: 100%;
+            top: 50%; transform: translateY(-50%);
+            background: repeating-linear-gradient(to right, rgba(250,204,21,0.3) 0px, rgba(250,204,21,0.3) 12px, transparent 12px, transparent 24px);
+        }
+
+        /* Direction labels and cars */
+        .dir-label {
+            position: absolute;
+            z-index: 10;
+            text-align: center;
+        }
+        .dir-label .label-text {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+        .dir-label .car-count {
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-top: 2px;
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+        .dir-label.north { top: 8px; left: 50%; transform: translateX(-50%); }
+        .dir-label.south { bottom: 8px; left: 50%; transform: translateX(-50%); }
+        .dir-label.east  { right: 8px; top: 50%; transform: translateY(-50%); }
+        .dir-label.west  { left: 8px; top: 50%; transform: translateY(-50%); }
+
+        .car-count.green { color: var(--accent-green); text-shadow: 0 0 16px rgba(34,197,94,0.5); }
+        .car-count.red   { color: var(--accent-red); text-shadow: 0 0 16px rgba(239,68,68,0.4); }
+
+        /* Traffic light */
+        .traffic-light {
+            position: absolute;
+            z-index: 10;
+            left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+            width: 52px;
+            background: #0f172a;
+            border: 2px solid rgba(99,102,241,0.3);
+            border-radius: 26px;
+            padding: 8px 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .light-bulb {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            transition: background 0.4s, box-shadow 0.4s;
+            background: #1e293b;
+        }
+        .light-bulb.active-green { background: #22c55e; box-shadow: 0 0 18px rgba(34,197,94,0.7), inset 0 0 8px rgba(255,255,255,0.2); }
+        .light-bulb.active-red   { background: #ef4444; box-shadow: 0 0 18px rgba(239,68,68,0.7), inset 0 0 8px rgba(255,255,255,0.2); }
+
+        /* Car dots animation */
+        .car-dots {
+            position: absolute;
+            z-index: 5;
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .car-dots.north { top: 50px; left: 50%; transform: translateX(-50%); width: 60px; flex-direction: column; align-items: center; }
+        .car-dots.south { bottom: 50px; left: 50%; transform: translateX(-50%); width: 60px; flex-direction: column; align-items: center; }
+        .car-dots.east  { right: 50px; top: 50%; transform: translateY(-50%); height: 60px; flex-direction: row; align-items: center; }
+        .car-dots.west  { left: 50px; top: 50%; transform: translateY(-50%); height: 60px; flex-direction: row; align-items: center; }
+
+        .car-dot {
+            width: 10px; height: 10px;
+            border-radius: 3px;
+            transition: background 0.4s, box-shadow 0.4s, transform 0.3s;
+        }
+        .car-dot.go { background: var(--accent-green); box-shadow: 0 0 6px rgba(34,197,94,0.5); animation: carMove 0.8s ease infinite; }
+        .car-dot.stop { background: var(--accent-red); box-shadow: 0 0 6px rgba(239,68,68,0.3); }
+
+        /* Stats panel */
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(99,102,241,0.08);
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .stat-label { color: var(--text-secondary); font-size: 0.85rem; }
+        .stat-value {
+            font-weight: 700;
+            font-size: 1.1rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-value.positive { color: var(--accent-green); }
+        .stat-value.negative { color: var(--accent-red); }
+        .stat-value.neutral  { color: var(--accent-cyan); }
+
+        /* Controls */
+        .controls { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+        .btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .btn:hover { border-color: var(--accent-blue); box-shadow: var(--glow-blue); transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+        .btn.primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); border-color: #6366f1; }
+        .btn.primary:hover { box-shadow: 0 0 24px rgba(99,102,241,0.5); }
+        .btn.green { background: linear-gradient(135deg, #059669, #22c55e); border-color: #22c55e; }
+        .btn.amber { background: linear-gradient(135deg, #d97706, #f59e0b); border-color: #f59e0b; }
+        .btn.danger { background: linear-gradient(135deg, #dc2626, #ef4444); border-color: #ef4444; }
+
+        /* Reward Chart */
+        .chart-container {
+            margin-top: 16px;
+            height: 140px;
+            position: relative;
+            background: rgba(15,23,42,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(99,102,241,0.1);
+        }
+        .chart-canvas { width: 100%; height: 100%; }
+
+        /* Score bar */
+        .score-bar-container {
+            margin-top: 12px;
+            background: rgba(15,23,42,0.6);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        .score-bar-track {
+            height: 8px;
+            background: rgba(99,102,241,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .score-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+            width: 0%;
+        }
+        .score-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+        }
+        .score-label .label { color: var(--text-muted); }
+        .score-label .value { font-weight: 700; }
+
+        /* Mode selector */
+        .mode-selector {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 16px;
+            background: rgba(15,23,42,0.6);
+            padding: 4px;
+            border-radius: 10px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .mode-btn.active {
+            background: var(--accent-blue);
+            color: white;
+            box-shadow: 0 2px 8px rgba(99,102,241,0.4);
+        }
+        .mode-btn:hover:not(.active) { color: var(--text-primary); background: rgba(99,102,241,0.1); }
+
+        /* Log */
+        .log-container {
+            margin-top: 16px;
+            max-height: 180px;
+            overflow-y: auto;
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .log-entry {
+            padding: 3px 0;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(99,102,241,0.05);
+        }
+        .log-entry span.action { color: var(--accent-cyan); }
+        .log-entry span.reward-pos { color: var(--accent-green); }
+        .log-entry span.reward-neg { color: var(--accent-red); }
+
+        /* Animations */
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes carMove { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+        /* Auto-play indicator */
+        .auto-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 8px;
+        }
+        .auto-badge.running { background: rgba(34,197,94,0.15); color: var(--accent-green); border: 1px solid rgba(34,197,94,0.3); }
+        .auto-badge.stopped { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
+        .auto-badge .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .auto-badge.running .badge-dot { background: var(--accent-green); animation: pulse 1.5s infinite; }
+        .auto-badge.stopped .badge-dot { background: var(--accent-red); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <h1>🚦 Traffic RL — Live Dashboard</h1>
+        <p>Reinforcement Learning Traffic Signal Control</p>
+    </div>
+
+    <div class="grid">
+        <!-- Left Column: Stats & Controls -->
+        <div>
+            <div class="card">
+                <div class="card-title"><span class="dot"></span> Controls</div>
+
+                <div class="mode-selector">
+                    <button class="mode-btn active" data-mode="manual" onclick="setMode('manual')">Manual</button>
+                    <button class="mode-btn" data-mode="heuristic" onclick="setMode('heuristic')">Heuristic</button>
+                    <button class="mode-btn" data-mode="q-table" onclick="setMode('q-table')">Q-Table</button>
+                </div>
+
+                <div class="controls">
+                    <button class="btn green" onclick="doStep(0)">🟢 NS Green</button>
+                    <button class="btn amber" onclick="doStep(1)">🟡 EW Green</button>
+                </div>
+                <div class="controls">
+                    <button class="btn primary" onclick="toggleAuto()">⚡ Auto-play</button>
+                    <button class="btn danger" onclick="doReset()">🔄 Reset</button>
+                </div>
+
+                <div style="text-align:center; margin-top: 10px;">
+                    <div id="autoBadge" class="auto-badge stopped">
+                        <span class="badge-dot"></span>
+                        <span id="autoLabel">Stopped</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">📊 Episode Stats</div>
+                <div class="stat-row">
+                    <span class="stat-label">Step</span>
+                    <span id="statStep" class="stat-value neutral">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Reward</span>
+                    <span id="statReward" class="stat-value neutral">0.000</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Avg Reward</span>
+                    <span id="statAvgReward" class="stat-value neutral">0.000</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Cars</span>
+                    <span id="statCars" class="stat-value neutral">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Signal</span>
+                    <span id="statSignal" class="stat-value neutral">—</span>
+                </div>
+
+                <div class="score-bar-container">
+                    <div class="score-label">
+                        <span class="label">Score</span>
+                        <span id="scoreValue" class="value" style="color:var(--accent-cyan)">0.000</span>
+                    </div>
+                    <div class="score-bar-track">
+                        <div id="scoreBar" class="score-bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Column: Intersection -->
+        <div>
+            <div class="card">
+                <div class="card-title"><span class="dot"></span> Live Intersection</div>
+                <div class="intersection-wrapper">
+                    <div class="intersection-canvas">
+                        <div class="road road-ns"></div>
+                        <div class="road road-ew"></div>
+                        <div class="road-center"></div>
+                        <div class="lane-marker ns"></div>
+                        <div class="lane-marker ew"></div>
+
+                        <div class="dir-label north">
+                            <div class="label-text">North</div>
+                            <div id="carsN" class="car-count red">0</div>
+                        </div>
+                        <div class="dir-label south">
+                            <div class="label-text">South</div>
+                            <div id="carsS" class="car-count red">0</div>
+                        </div>
+                        <div class="dir-label east">
+                            <div class="label-text">East</div>
+                            <div id="carsE" class="car-count red">0</div>
+                        </div>
+                        <div class="dir-label west">
+                            <div class="label-text">West</div>
+                            <div id="carsW" class="car-count red">0</div>
+                        </div>
+
+                        <div id="dotsN" class="car-dots north"></div>
+                        <div id="dotsS" class="car-dots south"></div>
+                        <div id="dotsE" class="car-dots east"></div>
+                        <div id="dotsW" class="car-dots west"></div>
+
+                        <div class="traffic-light">
+                            <div id="lightRed" class="light-bulb active-red"></div>
+                            <div id="lightGreen" class="light-bulb"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">📈 Reward History</div>
+                <div class="chart-container">
+                    <canvas id="rewardChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Log -->
+        <div>
+            <div class="card">
+                <div class="card-title"><span class="dot"></span> Inference Log</div>
+                <div id="logContainer" class="log-container">
+                    <div class="log-entry" style="color:var(--accent-cyan);">Dashboard ready. Hit Reset to begin.</div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">ℹ️ About</div>
+                <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6;">
+                    <p><strong style="color:var(--text-primary)">Goal:</strong> Minimize waiting vehicles by switching signals.</p>
+                    <p style="margin-top:8px"><strong style="color:var(--text-primary)">Actions:</strong> 0 = NS green, 1 = EW green.</p>
+                    <p style="margin-top:8px"><strong style="color:var(--text-primary)">Reward:</strong> Positive when total cars decrease. Clamped to [-1, +1].</p>
+                    <p style="margin-top:8px"><strong style="color:var(--text-primary)">Modes:</strong></p>
+                    <ul style="margin-left:16px; margin-top:4px;">
+                        <li><strong>Manual</strong> — You pick the action</li>
+                        <li><strong>Heuristic</strong> — Picks the heavier side</li>
+                        <li><strong>Q-Table</strong> — Uses trained RL agent</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // State
+    let mode = "manual";
+    let autoRunning = false;
+    let autoTimer = null;
+    let stepCount = 0;
+    let totalReward = 0;
+    let rewardHistory = [];
+    let currentObs = null;
+
+    // DOM
+    const $ = id => document.getElementById(id);
+
+    function setMode(m) {
+        mode = m;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+        addLog(`Mode → ${m.toUpperCase()}`, 'action');
+    }
+
+    async function doReset() {
+        stopAuto();
+        try {
+            const res = await fetch('/reset', { method: 'POST' });
+            currentObs = await res.json();
+            stepCount = 0;
+            totalReward = 0;
+            rewardHistory = [];
+            updateUI(currentObs);
+            updateStats();
+            drawChart();
+            addLog('Environment RESET', 'action');
+        } catch (e) {
+            addLog(`ERROR: ${e.message}`, 'reward-neg');
+        }
+    }
+
+    async function doStep(signalOverride) {
+        let signal = signalOverride;
+
+        if (signal === undefined || signal === null) {
+            if (!currentObs) { addLog('Reset first!', 'reward-neg'); return; }
+            signal = pickAction(currentObs);
+        }
+
+        try {
+            const res = await fetch('/step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ signal })
+            });
+            const data = await res.json();
+            currentObs = data.observation;
+            stepCount++;
+            totalReward += data.reward;
+            rewardHistory.push(data.reward);
+
+            updateUI(currentObs);
+            updateStats(data.reward, data.done);
+            drawChart();
+
+            const rClass = data.reward >= 0 ? 'reward-pos' : 'reward-neg';
+            addLog(`Step ${stepCount} | Action: ${signal === 0 ? 'NS' : 'EW'} | Reward: <span class="${rClass}">${data.reward.toFixed(3)}</span>`, 'action');
+
+            if (data.done) {
+                const score = gradeEpisode(totalReward, stepCount);
+                addLog(`✅ DONE — Score: ${score.toFixed(4)} | Total Reward: ${totalReward.toFixed(3)}`, 'reward-pos');
+                stopAuto();
+            }
+        } catch (e) {
+            addLog(`ERROR: ${e.message}`, 'reward-neg');
+            stopAuto();
+        }
+    }
+
+    function pickAction(obs) {
+        if (mode === 'heuristic') {
+            const ns = obs.north + obs.south;
+            const ew = obs.east + obs.west;
+            return ns >= ew ? 0 : 1;
+        }
+        if (mode === 'q-table') {
+            // Simple heuristic approximation (real Q-table is server-side)
+            const ns = obs.north + obs.south;
+            const ew = obs.east + obs.west;
+            if (Math.abs(ns - ew) > 2) return ns > ew ? 0 : 1;
+            return obs.signal; // keep current signal if balanced
+        }
+        return obs.signal === 0 ? 0 : 1; // default: keep
+    }
+
+    function toggleAuto() {
+        if (autoRunning) { stopAuto(); }
+        else { startAuto(); }
+    }
+    function startAuto() {
+        if (!currentObs) { addLog('Reset first!', 'reward-neg'); return; }
+        autoRunning = true;
+        $('autoBadge').className = 'auto-badge running';
+        $('autoLabel').textContent = 'Running';
+        addLog('Auto-play STARTED', 'action');
+        autoTick();
+    }
+    function stopAuto() {
+        autoRunning = false;
+        clearTimeout(autoTimer);
+        $('autoBadge').className = 'auto-badge stopped';
+        $('autoLabel').textContent = 'Stopped';
+    }
+    function autoTick() {
+        if (!autoRunning) return;
+        doStep().then(() => {
+            if (autoRunning) autoTimer = setTimeout(autoTick, 400);
+        });
+    }
+
+    // UI Update
+    function updateUI(obs) {
+        if (!obs) return;
+        const nsGreen = obs.signal === 0;
+
+        $('carsN').textContent = obs.north;
+        $('carsS').textContent = obs.south;
+        $('carsE').textContent = obs.east;
+        $('carsW').textContent = obs.west;
+
+        $('carsN').className = `car-count ${nsGreen ? 'green' : 'red'}`;
+        $('carsS').className = `car-count ${nsGreen ? 'green' : 'red'}`;
+        $('carsE').className = `car-count ${nsGreen ? 'red' : 'green'}`;
+        $('carsW').className = `car-count ${nsGreen ? 'red' : 'green'}`;
+
+        $('lightRed').className = `light-bulb ${nsGreen ? '' : 'active-red'}`;
+        $('lightGreen').className = `light-bulb ${nsGreen ? 'active-green' : ''}`;
+
+        renderDots('dotsN', obs.north, nsGreen);
+        renderDots('dotsS', obs.south, nsGreen);
+        renderDots('dotsE', obs.east, !nsGreen);
+        renderDots('dotsW', obs.west, !nsGreen);
+    }
+
+    function renderDots(containerId, count, isGreen) {
+        const el = $(containerId);
+        el.innerHTML = '';
+        for (let i = 0; i < Math.min(count, 8); i++) {
+            const dot = document.createElement('div');
+            dot.className = `car-dot ${isGreen ? 'go' : 'stop'}`;
+            dot.style.animationDelay = `${i * 0.1}s`;
+            el.appendChild(dot);
+        }
+    }
+
+    function updateStats(lastReward, done) {
+        $('statStep').textContent = stepCount;
+        $('statReward').textContent = totalReward.toFixed(3);
+        $('statReward').className = `stat-value ${totalReward >= 0 ? 'positive' : 'negative'}`;
+        $('statAvgReward').textContent = stepCount > 0 ? (totalReward / stepCount).toFixed(3) : '0.000';
+        $('statAvgReward').className = `stat-value ${totalReward >= 0 ? 'positive' : 'negative'}`;
+        if (currentObs) {
+            const total = currentObs.north + currentObs.south + currentObs.east + currentObs.west;
+            $('statCars').textContent = total;
+            $('statSignal').textContent = currentObs.signal === 0 ? '🟢 NS Green' : '🟡 EW Green';
+            $('statSignal').className = 'stat-value ' + (currentObs.signal === 0 ? 'positive' : '');
+            $('statSignal').style.color = currentObs.signal === 0 ? 'var(--accent-green)' : 'var(--accent-amber)';
+        }
+        const score = stepCount > 0 ? gradeEpisode(totalReward, stepCount) : 0;
+        $('scoreValue').textContent = score.toFixed(3);
+        const pct = Math.min(100, Math.max(0, score * 100));
+        $('scoreBar').style.width = pct + '%';
+        const hue = pct * 1.2; // 0=red, 120=green
+        $('scoreBar').style.background = `linear-gradient(90deg, hsl(${hue},80%,50%), hsl(${Math.min(hue+30,130)},80%,60%))`;
+        $('scoreValue').style.color = `hsl(${hue},80%,60%)`;
+    }
+
+    function gradeEpisode(totalR, steps) {
+        if (steps === 0) return 0;
+        const worst = -steps;
+        const best = steps;
+        return Math.max(0, Math.min(1, (totalR - worst) / (best - worst)));
+    }
+
+    // Chart
+    function drawChart() {
+        const canvas = $('rewardChart');
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = canvas.offsetWidth * dpr;
+        canvas.height = canvas.offsetHeight * dpr;
+        ctx.scale(dpr, dpr);
+        const W = canvas.offsetWidth, H = canvas.offsetHeight;
+        ctx.clearRect(0, 0, W, H);
+
+        if (rewardHistory.length < 2) return;
+
+        const maxR = Math.max(1, ...rewardHistory.map(Math.abs));
+        const midY = H / 2;
+
+        // zero line
+        ctx.strokeStyle = 'rgba(99,102,241,0.15)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(W, midY); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // reward line
+        const stepW = W / (rewardHistory.length - 1);
+        ctx.beginPath();
+        rewardHistory.forEach((r, i) => {
+            const x = i * stepW;
+            const y = midY - (r / maxR) * (H * 0.4);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // gradient fill
+        const grad = ctx.createLinearGradient(0, 0, 0, H);
+        grad.addColorStop(0, 'rgba(99,102,241,0.15)');
+        grad.addColorStop(0.5, 'rgba(99,102,241,0.02)');
+        grad.addColorStop(1, 'rgba(239,68,68,0.08)');
+        ctx.lineTo(W, midY);
+        ctx.lineTo(0, midY);
+        ctx.fillStyle = grad;
+        ctx.fill();
+    }
+
+    // Log
+    function addLog(msg, cls) {
+        const el = $('logContainer');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="${cls || ''}">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+        el.appendChild(entry);
+        el.scrollTop = el.scrollHeight;
+        // keep last 100
+        while (el.children.length > 100) el.removeChild(el.firstChild);
+    }
+
+    // Init
+    window.addEventListener('resize', drawChart);
+</script>
+</body>
+</html>
